@@ -81,16 +81,53 @@ func main() {
 		userAppContext, userAppDone := context.WithCancel(context.Background())
 		defer userAppDone()
 
-		app.compileAndRunUserApp(userAppContext)
+		go func() {
+			err := app.compileUserApp()
+
+			if err != nil {
+				app.errorLog.Printf("Compilation error: %v", err)
+				return
+			}
+		
+			//app.wsHub.broadcast <- []byte("Test")
+			err = app.runUserApp(ctx)
+			if err != nil {
+				app.errorLog.Printf("Run error: %v", err)
+				return
+			}
+		
+			app.infoLog.Printf("User app stopped")
+		}()
 
 		for {
-			userAppContext, userAppDone = context.WithCancel(context.Background())
 
 			select {
 			case event := <-watcher.Events:
+				if event.Name == "..\\HomeAutomation\\hass\\hassigo-user-app.exe" {
+					continue
+				}
+
 				fmt.Printf("EVENT! %#v\n", event)
 				userAppDone()
-				app.compileAndRunUserApp(userAppContext)
+				userAppContext, userAppDone = context.WithCancel(context.Background())
+				
+				err := app.compileUserApp()
+
+				if err != nil {
+					app.errorLog.Printf("Compilation error: %v", err)
+					return
+				}
+			
+				go func() {
+					//app.wsHub.broadcast <- []byte("Test")
+				err = app.runUserApp(ctx)
+				if err != nil {
+					app.errorLog.Printf("Run error: %v", err)
+					return
+				}
+			
+				app.infoLog.Printf("User app stopped")
+			}
 			case err := <-watcher.Errors:
 				fmt.Println("ERROR", err)
 
@@ -138,22 +175,6 @@ func startHTTPServer(listener string, handler http.Handler) (*http.Server, <-cha
 
 	// returning reference so caller can call Shutdown()
 	return srv, errorChan
-}
-
-func (app *application) compileAndRunUserApp(ctx context.Context) {
-	err := app.compileUserApp()
-
-	if err != nil {
-		app.errorLog.Printf("Compilation error: %v", err)
-		return
-	}
-
-	//app.wsHub.broadcast <- []byte("Test")
-	err = app.runUserApp(ctx)
-	if err != nil {
-		app.errorLog.Printf("Run error: %v", err)
-		return
-	}
 }
 
 func (app *application) compileUserApp() error {
@@ -219,7 +240,5 @@ func (app *application) runUserApp(ctx context.Context) error {
 			return nil
 		}
 	}
-
-	return nil
 
 }
