@@ -9,14 +9,14 @@ ENV LANG C.UTF-8
 EXPOSE 7080
 
 WORKDIR /HassiGo
-COPY bin .
+COPY addon/bin .
 RUN chmod a+x ./hassigo
 
 #COPY --from=go /usr/local/go/ /usr/local/go/
 
 #RUN export PATH="/usr/local/go/bin:$PATH" && go version
 
-ARG GOLANG_VERSION=1.14.3
+ARG GOLANG_VERSION=1.14.4
 
 #we need the go version installed from apk to bootstrap the custom version built from source
 RUN apk update && apk add go gcc bash musl-dev openssl-dev ca-certificates && update-ca-certificates
