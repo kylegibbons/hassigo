@@ -1,0 +1,21 @@
+{
+    "name": "HassiGo",
+    "version": "0.0.25",
+    "slug": "hassigo",
+    "description": "HassiGo description",
+    "arch": ["armhf", "armv7", "aarch64", "amd64", "i386"],
+    "startup": "application",
+    "stage": "experimental",
+    "boot": "auto",
+    "url": "https://github.com/kylegibbons/hassigo",
+    "options": {},
+    "schema": {},
+    "homeassistant_api": true,
+    "map": ["config:rw"],
+    "ports": {
+        "7080/tcp": 7080
+      },
+    "ports_description": {
+    "7080/tcp": "HassiGo"
+    }
+  }

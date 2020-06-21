@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -19,18 +18,26 @@ import (
 )
 
 type application struct {
-	infoLog  *log.Logger
-	warnLog  *log.Logger
-	errorLog *log.Logger
-	wsHub    *hub
+	infoLog     *log.Logger
+	warnLog     *log.Logger
+	errorLog    *log.Logger
+	wsHub       *hub
+	userAppPath string
 }
 
 func main() {
 	app := &application{
-		infoLog:  log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime),
-		warnLog:  log.New(os.Stdout, "WARN\t", log.Ldate|log.Ltime),
-		errorLog: log.New(os.Stdout, "ERROR\t", log.Ldate|log.Ltime),
-		wsHub:    newHub(false),
+		infoLog:     log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime),
+		warnLog:     log.New(os.Stdout, "WARN\t", log.Ldate|log.Ltime),
+		errorLog:    log.New(os.Stdout, "ERROR\t", log.Ldate|log.Ltime),
+		wsHub:       newHub(false),
+		userAppPath: "/config/HassiGo",
+	}
+
+	app.infoLog.Printf("StartingHassiGo..")
+
+	if _, err := os.Stat(app.userAppPath); os.IsNotExist(err) {
+		os.MkdirAll(app.userAppPath, os.ModeDir)
 	}
 
 	go app.wsHub.run()
@@ -53,87 +60,12 @@ func main() {
 
 	router := app.NewRouter()
 
-	httpServer, httpErrorChan := startHTTPServer(":7070", router)
+	httpServer, httpErrorChan := startHTTPServer(":7080", router)
 
 	httpShutdownCtx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	defer httpServer.Shutdown(httpShutdownCtx)
 
-	go func() {
-		watcher, err := fsnotify.NewWatcher()
-		defer watcher.Close()
-
-		if err != nil {
-			app.errorLog.Printf("Could not start file watcher: %v", err)
-			return
-		}
-
-		if err := filepath.Walk("..\\HomeAutomation\\hass\\", func(path string, fi os.FileInfo, err error) error {
-			if fi.Mode().IsDir() {
-				fmt.Printf("Adding: %s\n", path)
-				return watcher.Add(path)
-			}
-
-			return nil
-		}); err != nil {
-			fmt.Println("ERROR", err)
-		}
-
-		userAppContext, userAppDone := context.WithCancel(context.Background())
-		defer userAppDone()
-
-		go func() {
-			err := app.compileUserApp()
-
-			if err != nil {
-				app.errorLog.Printf("Compilation error: %v", err)
-				return
-			}
-		
-			//app.wsHub.broadcast <- []byte("Test")
-			err = app.runUserApp(ctx)
-			if err != nil {
-				app.errorLog.Printf("Run error: %v", err)
-				return
-			}
-		
-			app.infoLog.Printf("User app stopped")
-		}()
-
-		for {
-
-			select {
-			case event := <-watcher.Events:
-				if event.Name == "..\\HomeAutomation\\hass\\hassigo-user-app.exe" {
-					continue
-				}
-
-				fmt.Printf("EVENT! %#v\n", event)
-				userAppDone()
-				userAppContext, userAppDone = context.WithCancel(context.Background())
-				
-				err := app.compileUserApp()
-
-				if err != nil {
-					app.errorLog.Printf("Compilation error: %v", err)
-					return
-				}
-			
-				go func() {
-					//app.wsHub.broadcast <- []byte("Test")
-				err = app.runUserApp(ctx)
-				if err != nil {
-					app.errorLog.Printf("Run error: %v", err)
-					return
-				}
-			
-				app.infoLog.Printf("User app stopped")
-			}
-			case err := <-watcher.Errors:
-				fmt.Println("ERROR", err)
-
-			}
-		}
-	}()
+	go app.startWatcher(ctx)
 
 	for {
 		select {
@@ -143,6 +75,175 @@ func main() {
 			return
 		}
 	}
+}
+
+func (app *application) startWatcher(ctx context.Context) {
+
+	watcher, err := fsnotify.NewWatcher()
+	defer watcher.Close()
+
+	if err != nil {
+		app.errorLog.Printf("Could not start file watcher: %v", err)
+		return
+	}
+
+	if err := filepath.Walk(app.userAppPath, func(path string, fi os.FileInfo, err error) error {
+		if fi.Name() == "hassigo-userapp" || fi.Name() == "hassigo-userapp-run" {
+			return nil
+		}
+
+		if err != nil {
+			fmt.Printf("Watcher error: %v", err)
+			return nil
+		}
+
+		if fi.Mode().IsDir() {
+			fmt.Printf("Adding: %s\n", path)
+			return watcher.Add(path)
+		}
+
+		return nil
+	}); err != nil {
+		fmt.Println("ERROR", err)
+	}
+
+	userAppContext, userAppDone := context.WithCancel(context.Background())
+	defer userAppDone()
+	_ = userAppContext
+
+	go func() {
+		err := app.compileUserApp()
+
+		if err != nil {
+			app.errorLog.Printf("Compilation error: %v", err)
+		}
+
+		//app.wsHub.broadcast <- []byte("Test")
+		err = app.runUserApp(ctx)
+		if err != nil {
+			app.errorLog.Printf("Run error: %v", err)
+			return
+		}
+
+		app.infoLog.Printf("User app stopped")
+	}()
+
+	for {
+
+		select {
+		case event := <-watcher.Events:
+
+			fmt.Printf("EVENT: %#v\n", event)
+
+			err := app.compileUserApp()
+
+			if err != nil {
+				app.errorLog.Printf("Compilation error: %v", err)
+				return
+			}
+
+			userAppDone()
+			userAppContext, userAppDone = context.WithCancel(context.Background())
+			defer userAppDone()
+
+			go func() {
+				//app.wsHub.broadcast <- []byte("Test")
+				err = app.runUserApp(ctx)
+				if err != nil {
+					app.errorLog.Printf("Run error: %v", err)
+					return
+				}
+
+				app.infoLog.Printf("User app stopped")
+			}()
+		case err := <-watcher.Errors:
+			fmt.Println("ERROR", err)
+
+		}
+	}
+}
+
+func (app *application) compileUserApp() error {
+	app.infoLog.Printf("Compiling user application...")
+
+	cmd := exec.Command("go", "get")
+
+	cmd.Dir = app.userAppPath
+
+	mw := io.MultiWriter(os.Stdout, app.wsHub)
+
+	cmd.Stdout = mw
+	cmd.Stderr = mw
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("running go get failed with %s", err)
+	}
+
+	cmd = exec.Command("go", "build", "-o", "hassigo-userapp")
+
+	cmd.Dir = app.userAppPath
+
+	cmd.Stdout = mw
+	cmd.Stderr = mw
+
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("compiling user app failed with %s", err)
+	}
+
+	return nil
+}
+
+func (app *application) runUserApp(ctx context.Context) error {
+	app.infoLog.Printf("Running user application...")
+
+	if _, err := os.Stat(filepath.Join(app.userAppPath, "hassigo-userapp")); !os.IsNotExist(err) {
+		file1, err := os.Open(filepath.Join(app.userAppPath, "hassigo-userapp"))
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer file1.Close()
+
+		file2, err := os.Create(filepath.Join(app.userAppPath, "hassigo-userapp-run"))
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer file2.Close()
+
+		_, err = io.Copy(file2, file1)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		err = file2.Sync()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+
+	cmd := exec.Command("hassigo-user-app-run")
+
+	cmd.Dir = app.userAppPath
+
+	mw := io.MultiWriter(os.Stdout, app.wsHub)
+
+	cmd.Stdout = mw
+	cmd.Stderr = mw
+
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Errorf("running user app failed with %s", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			cmd.Process.Kill()
+			return nil
+		}
+	}
+
 }
 
 func startHTTPServer(listener string, handler http.Handler) (*http.Server, <-chan error) {
@@ -175,70 +276,4 @@ func startHTTPServer(listener string, handler http.Handler) (*http.Server, <-cha
 
 	// returning reference so caller can call Shutdown()
 	return srv, errorChan
-}
-
-func (app *application) compileUserApp() error {
-	app.infoLog.Printf("Compiling user application...")
-
-	cmd := exec.Command("go", "get")
-
-	cmd.Dir = "..\\HomeAutomation\\hass"
-
-	mw := io.MultiWriter(os.Stdout, app.wsHub)
-
-	cmd.Stdout = mw
-	cmd.Stderr = mw
-
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("running go get failed with %s", err)
-	}
-
-	cmd = exec.Command("go", "build", "-o", "hassigo-user-app.exe")
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("go", "build", "-o", "hassigo-user-app.exe")
-	}
-
-	cmd.Dir = "..\\HomeAutomation\\hass"
-
-	cmd.Stdout = mw
-	cmd.Stderr = mw
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("compiling user app failed with %s", err)
-	}
-
-	return nil
-}
-
-func (app *application) runUserApp(ctx context.Context) error {
-	app.infoLog.Printf("Running user application...")
-
-	cmd := exec.Command("hassigo-user-app")
-
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command(".\\hassigo-user-app.exe")
-	}
-
-	cmd.Dir = "..\\HomeAutomation\\hass"
-
-	mw := io.MultiWriter(os.Stdout, app.wsHub)
-
-	cmd.Stdout = mw
-	cmd.Stderr = mw
-
-	err := cmd.Start()
-	if err != nil {
-		return fmt.Errorf("running user app failed with %s", err)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			cmd.Process.Kill()
-			return nil
-		}
-	}
-
 }
