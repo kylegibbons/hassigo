@@ -9,7 +9,7 @@ ENV LANG C.UTF-8
 EXPOSE 7080
 
 WORKDIR /HassiGo
-COPY addon/bin .
+COPY /data/git/addon/bin .
 RUN chmod a+x ./hassigo
 
 #COPY --from=go /usr/local/go/ /usr/local/go/
