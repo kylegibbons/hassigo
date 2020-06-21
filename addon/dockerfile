@@ -37,8 +37,21 @@ RUN go version
 
 LABEL \
     io.hass.name="HassiGo" \
-    io.hass.description="desc" \
+    io.hass.description="HassiGo description" \
+    io.hass.arch="${BUILD_ARCH}" \
     io.hass.type="addon" \
-    io.hass.version=${BUILD_VERSION}
+    io.hass.version=${BUILD_VERSION} \
+    maintainer="Kyle Gibbons <kyle@kylegibbons.com>" \
+    org.opencontainers.image.title="HassiGo" \
+    org.opencontainers.image.description="HassiGo description" \
+    org.opencontainers.image.vendor="Kyle Gibbons" \
+    org.opencontainers.image.authors="Kyle Gibbons <kyle@kylegibbons.com>" \
+    org.opencontainers.image.licenses="MIT" \
+    org.opencontainers.image.url="https://kylegibbons.com" \
+    org.opencontainers.image.source="https://github.com/kylegibbons/hassigo" \
+    org.opencontainers.image.documentation="https://github.com/kylegibbons/hassigo" \
+    org.opencontainers.image.created=${BUILD_DATE} \
+    org.opencontainers.image.revision=${BUILD_REF} \
+    org.opencontainers.image.version=${BUILD_VERSION}
 
 CMD [ "./hassigo" ]
