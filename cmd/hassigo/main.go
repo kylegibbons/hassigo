@@ -153,7 +153,7 @@ func (app *application) startWatcher(ctx context.Context, appChan chan appEvent)
 
 			if err != nil {
 				app.errorLog.Printf("Compilation error: %v", err)
-				return
+				continue
 			}
 
 			appChan <- appEvent{
@@ -178,8 +178,8 @@ func (app *application) compileUserApp() error {
 
 	mw := io.MultiWriter(os.Stdout, app.wsHub)
 
-	cmd.Stdout = mw
-	cmd.Stderr = mw
+	cmd.Stdout = log.New(mw, "COMPILER:", 0).Writer()
+	cmd.Stderr = log.New(mw, "COMPILER:", 0).Writer()
 
 	err := cmd.Run()
 	if err != nil {
@@ -217,8 +217,8 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 
 		cmd.Dir = app.userAppPath
 
-		cmd.Stdout = mw
-		cmd.Stderr = mw
+		cmd.Stdout = log.New(mw, name, 0).Writer()
+		cmd.Stderr = log.New(mw, name, 0).Writer()
 
 		// app.infoLog.Printf("Starting app: %v", name)
 
