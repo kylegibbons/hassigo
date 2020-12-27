@@ -40,7 +40,7 @@ func main() {
 		userAppPath: "/config/HassiGo",
 	}
 
-	app.infoLog.Printf("Starting HassiGo 0.0.28...")
+	app.infoLog.Printf("Starting HassiGo 0.0.29...")
 
 	if _, err := os.Stat(app.userAppPath); os.IsNotExist(err) {
 		os.MkdirAll(app.userAppPath, os.ModeDir)
@@ -271,6 +271,7 @@ func (app *application) copyUserApp() error {
 			return err
 		}
 		defer file2.Close()
+		file2.Chmod(os.ModePerm)
 
 		_, err = io.Copy(file2, file1)
 		if err != nil {
