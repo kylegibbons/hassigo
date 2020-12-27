@@ -7,4 +7,4 @@ go build -a -o ./addon/bin/hassigo ./cmd/hassigo
 
 copy-item ./cmd/hassigo/raw.html ./addon/bin | Out-Null
 
-docker build -t kylegibbons/hassigo --build-arg BUILD_FROM=alpine ./addon 
+#docker build -t kylegibbons/hassigo --build-arg BUILD_FROM=alpine ./addon 

@@ -240,7 +240,13 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 							app.errorLog.Printf("Could not kill user app: %s", err)
 						}
 					}
-					app.copyUserApp()
+
+					err = app.copyUserApp()
+
+					if err != nil {
+						app.errorLog.Printf("Could not copy user app: %s", err)
+					}
+
 					app.infoLog.Printf("Starting app: %v", name)
 
 					cmd = exec.Command("./hassigo-userapp-run")
@@ -252,7 +258,7 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 
 					err := cmd.Start()
 					if err != nil {
-						app.errorLog.Printf("running user app failed with %s", err)
+						app.errorLog.Printf("Running user app failed with %s", err)
 					}
 				}
 			case <-ctx.Done():
