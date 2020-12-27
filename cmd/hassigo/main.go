@@ -241,6 +241,12 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 						}
 					}
 
+					app.infoLog.Println("Waiting for app to stop")
+
+					cmd.Wait()
+
+					app.infoLog.Println("Waiting for app to stop")
+
 					err = app.copyUserApp()
 
 					if err != nil {
