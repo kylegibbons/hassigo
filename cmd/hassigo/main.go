@@ -243,6 +243,13 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 					app.copyUserApp()
 					app.infoLog.Printf("Starting app: %v", name)
 
+					cmd = exec.Command("./hassigo-userapp-run")
+
+					cmd.Dir = app.userAppPath
+
+					cmd.Stdout = mw
+					cmd.Stderr = mw
+
 					err := cmd.Start()
 					if err != nil {
 						app.errorLog.Printf("running user app failed with %s", err)
