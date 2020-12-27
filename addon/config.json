@@ -1,6 +1,6 @@
 {
     "name": "HassiGo",
-    "version": "0.0.34",
+    "version": "0.0.35",
     "image": "kylegibbons/{arch}-hassigo",
     "slug": "hassigo",
     "description": "HassiGo description",

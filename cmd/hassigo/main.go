@@ -140,7 +140,7 @@ func (app *application) startWatcher(ctx context.Context, appChan chan appEvent)
 	}
 
 	for {
-		app.infoLog("Waiting for changes...")
+		app.infoLog.Printf("Waiting for changes...")
 		select {
 		case event := <-watcher.Events:
 			if strings.Contains(event.Name, "userapp") {
