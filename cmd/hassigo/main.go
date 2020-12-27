@@ -210,15 +210,15 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 		return err
 	}
 
-	//mw := io.MultiWriter(os.Stdout, app.wsHub)
+	mw := io.MultiWriter(os.Stdout, app.wsHub)
 
 	go func() {
 		cmd := exec.Command("./hassigo-userapp-run")
 
 		cmd.Dir = app.userAppPath
 
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stdout
+		cmd.Stdout = mw
+		cmd.Stderr = mw
 
 		// app.infoLog.Printf("Starting app: %v", name)
 
@@ -234,7 +234,11 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 				case "restart":
 					if cmd.Process != nil {
 						app.infoLog.Printf("Stopping app: %v", name)
-						cmd.Process.Kill()
+						err := cmd.Process.Kill()
+
+						if err != nil {
+							app.errorLog.Printf("Could not kill user app: %s", err)
+						}
 					}
 					app.copyUserApp()
 					app.infoLog.Printf("Starting app: %v", name)

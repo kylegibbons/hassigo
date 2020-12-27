@@ -1,6 +1,6 @@
 {
     "name": "HassiGo",
-    "version": "0.0.29",
+    "version": "0.0.30",
     "image": "kylegibbons/{arch}-hassigo",
     "slug": "hassigo",
     "description": "HassiGo description",
@@ -17,6 +17,6 @@
         "7080/tcp": 7080
       },
     "ports_description": {
-        "7080/tcp": "HassiGo"
+        "7080/tcp": "HassiGo Console"
       }
   }
