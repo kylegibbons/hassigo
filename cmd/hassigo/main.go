@@ -247,8 +247,8 @@ func (app *application) runUserApp(ctx context.Context, name string, appChan cha
 
 					cmd.Dir = app.userAppPath
 
-					cmd.Stdout = mw
-					cmd.Stderr = mw
+					cmd.Stdout = log.New(mw, name, 0).Writer()
+					cmd.Stderr = log.New(mw, name, 0).Writer()
 
 					err := cmd.Start()
 					if err != nil {
