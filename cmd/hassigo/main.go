@@ -136,18 +136,18 @@ func (app *application) startWatcher(ctx context.Context, appChan chan appEvent)
 
 		return nil
 	}); err != nil {
-		app.errorLog.Println("Filepath walk error: %v", err)
+		app.errorLog.Printf("Filepath walk error: %v", err)
 	}
 
 	for {
-
+		app.infoLog("Waiting for changes...")
 		select {
 		case event := <-watcher.Events:
 			if strings.Contains(event.Name, "userapp") {
 				continue
 			}
 
-			app.infoLog.Printf("EVENT: %#v\n", event)
+			app.infoLog.Printf("EVENT: %v\n", event)
 
 			err := app.compileUserApp()
 
@@ -190,8 +190,8 @@ func (app *application) compileUserApp() error {
 
 	cmd.Dir = app.userAppPath
 
-	cmd.Stdout = mw
-	cmd.Stderr = mw
+	cmd.Stdout = log.New(mw, "COMPILER:", 0).Writer()
+	cmd.Stderr = log.New(mw, "COMPILER:", 0).Writer()
 
 	err = cmd.Run()
 	if err != nil {
