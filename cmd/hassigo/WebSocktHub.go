@@ -46,7 +46,7 @@ func (h *hub) run() {
 			log.Println("WS Client Connected")
 			h.clients[client] = true
 
-			uuid, _ := uuid.NewV4()
+			uuid := uuid.NewV4()
 			client.clientID = uuid.String()
 
 		case client := <-h.unregister:

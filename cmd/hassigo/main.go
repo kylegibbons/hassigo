@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +26,11 @@ type application struct {
 	userAppPath string
 }
 
+type appEvent struct {
+	appName string
+	event   string
+}
+
 func main() {
 	app := &application{
 		infoLog:     log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime),
@@ -34,7 +40,7 @@ func main() {
 		userAppPath: "/config/HassiGo",
 	}
 
-	app.infoLog.Printf("StartingHassiGo..")
+	app.infoLog.Printf("Starting HassiGo 0.0.28...")
 
 	if _, err := os.Stat(app.userAppPath); os.IsNotExist(err) {
 		os.MkdirAll(app.userAppPath, os.ModeDir)
@@ -65,10 +71,39 @@ func main() {
 	httpShutdownCtx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	defer httpServer.Shutdown(httpShutdownCtx)
 
-	go app.startWatcher(ctx)
+	appEvents := make(chan appEvent, 10)
+
+	err := app.compileUserApp()
+
+	if err != nil {
+		app.errorLog.Printf("Could not compile app: %v", err)
+	}
+
+	//userAppCpntext
+
+	appEvents <- appEvent{
+		appName: "test",
+		event:   "new_version",
+	}
+
+	go app.startWatcher(ctx, appEvents)
+
+	appChannels := make(map[string]chan appEvent)
 
 	for {
 		select {
+		case event := <-appEvents:
+			if _, ok := appChannels[event.appName]; !ok {
+				appChannels[event.appName] = make(chan appEvent, 10)
+
+				app.runUserApp(ctx, event.appName, appChannels[event.appName])
+			}
+
+			appChannels[event.appName] <- appEvent{
+				appName: event.appName,
+				event:   "restart",
+			}
+
 		case err := <-httpErrorChan:
 			app.errorLog.Printf("%v", err)
 		case <-ctx.Done():
@@ -77,7 +112,7 @@ func main() {
 	}
 }
 
-func (app *application) startWatcher(ctx context.Context) {
+func (app *application) startWatcher(ctx context.Context, appChan chan appEvent) {
 
 	watcher, err := fsnotify.NewWatcher()
 	defer watcher.Close()
@@ -88,52 +123,31 @@ func (app *application) startWatcher(ctx context.Context) {
 	}
 
 	if err := filepath.Walk(app.userAppPath, func(path string, fi os.FileInfo, err error) error {
-		if fi.Name() == "hassigo-userapp" || fi.Name() == "hassigo-userapp-run" {
-			return nil
-		}
 
 		if err != nil {
-			fmt.Printf("Watcher error: %v", err)
+			app.errorLog.Printf("Watcher error: %v", err)
 			return nil
 		}
 
 		if fi.Mode().IsDir() {
-			fmt.Printf("Adding: %s\n", path)
+			app.infoLog.Printf("Adding: %s\n", path)
 			return watcher.Add(path)
 		}
 
 		return nil
 	}); err != nil {
-		fmt.Println("ERROR", err)
+		app.errorLog.Println("Filepath walk error: %v", err)
 	}
-
-	userAppContext, userAppDone := context.WithCancel(context.Background())
-	defer userAppDone()
-	_ = userAppContext
-
-	go func() {
-		err := app.compileUserApp()
-
-		if err != nil {
-			app.errorLog.Printf("Compilation error: %v", err)
-		}
-
-		//app.wsHub.broadcast <- []byte("Test")
-		err = app.runUserApp(ctx)
-		if err != nil {
-			app.errorLog.Printf("Run error: %v", err)
-			return
-		}
-
-		app.infoLog.Printf("User app stopped")
-	}()
 
 	for {
 
 		select {
 		case event := <-watcher.Events:
+			if strings.Contains(event.Name, "userapp") {
+				continue
+			}
 
-			fmt.Printf("EVENT: %#v\n", event)
+			app.infoLog.Printf("EVENT: %#v\n", event)
 
 			err := app.compileUserApp()
 
@@ -142,23 +156,15 @@ func (app *application) startWatcher(ctx context.Context) {
 				return
 			}
 
-			userAppDone()
-			userAppContext, userAppDone = context.WithCancel(context.Background())
-			defer userAppDone()
+			appChan <- appEvent{
+				appName: "test",
+				event:   "new_version",
+			}
 
-			go func() {
-				//app.wsHub.broadcast <- []byte("Test")
-				err = app.runUserApp(ctx)
-				if err != nil {
-					app.errorLog.Printf("Run error: %v", err)
-					return
-				}
-
-				app.infoLog.Printf("User app stopped")
-			}()
 		case err := <-watcher.Errors:
-			fmt.Println("ERROR", err)
-
+			app.errorLog.Println("ERROR", err)
+		case <-ctx.Done():
+			return
 		}
 	}
 }
@@ -195,55 +201,89 @@ func (app *application) compileUserApp() error {
 	return nil
 }
 
-func (app *application) runUserApp(ctx context.Context) error {
+func (app *application) runUserApp(ctx context.Context, name string, appChan chan appEvent) error {
 	app.infoLog.Printf("Running user application...")
 
+	err := app.copyUserApp()
+
+	if err != nil {
+		return err
+	}
+
+	//mw := io.MultiWriter(os.Stdout, app.wsHub)
+
+	go func() {
+		cmd := exec.Command("./hassigo-userapp-run")
+
+		cmd.Dir = app.userAppPath
+
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stdout
+
+		// app.infoLog.Printf("Starting app: %v", name)
+
+		// err := cmd.Start()
+		// if err != nil {
+		// 	app.errorLog.Printf("running user app 1 failed with %s", err)
+		// }
+
+		for {
+			select {
+			case event := <-appChan:
+				switch event.event {
+				case "restart":
+					if cmd.Process != nil {
+						app.infoLog.Printf("Stopping app: %v", name)
+						cmd.Process.Kill()
+					}
+					app.copyUserApp()
+					app.infoLog.Printf("Starting app: %v", name)
+
+					err := cmd.Start()
+					if err != nil {
+						app.errorLog.Printf("running user app failed with %s", err)
+					}
+				}
+			case <-ctx.Done():
+				if cmd.Process != nil {
+					app.infoLog.Printf("Stopping app: %v", name)
+					cmd.Process.Kill()
+				}
+				return
+			}
+		}
+	}()
+
+	return nil
+
+}
+
+func (app *application) copyUserApp() error {
 	if _, err := os.Stat(filepath.Join(app.userAppPath, "hassigo-userapp")); !os.IsNotExist(err) {
 		file1, err := os.Open(filepath.Join(app.userAppPath, "hassigo-userapp"))
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
 		defer file1.Close()
 
 		file2, err := os.Create(filepath.Join(app.userAppPath, "hassigo-userapp-run"))
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
 		defer file2.Close()
 
 		_, err = io.Copy(file2, file1)
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
 
 		err = file2.Sync()
 		if err != nil {
-			fmt.Println(err)
+			return err
 		}
 	}
 
-	cmd := exec.Command("hassigo-user-app-run")
-
-	cmd.Dir = app.userAppPath
-
-	mw := io.MultiWriter(os.Stdout, app.wsHub)
-
-	cmd.Stdout = mw
-	cmd.Stderr = mw
-
-	err := cmd.Start()
-	if err != nil {
-		return fmt.Errorf("running user app failed with %s", err)
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			cmd.Process.Kill()
-			return nil
-		}
-	}
-
+	return nil
 }
 
 func startHTTPServer(listener string, handler http.Handler) (*http.Server, <-chan error) {
