@@ -172,7 +172,7 @@ func (app *application) startWatcher(ctx context.Context, appChan chan appEvent)
 func (app *application) compileUserApp() error {
 	app.infoLog.Printf("Compiling user application...")
 
-	cmd := exec.Command("go", "get")
+	cmd := exec.Command("go", "get", "-u")
 
 	cmd.Dir = app.userAppPath
 
